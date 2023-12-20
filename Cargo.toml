@@ -6,10 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+egui = "0.24.1"
 glam = "0.23.0"
+open = "5.0.1"
 # stereokit = { path = "../stereokit-rs" }
-stereokit = "0.16.9"
-libmonado-rs = { git = "https://github.com/technobaboo/libmonado-rs.git" }
-svg = "0.14.0"
-openxr = { version = "0.17.1", features = ["linked"] }
-# stereokit-sys = { path = "../stereokit-sys" }
+stereokit = "0.16.8"
+# libmonado-rs = { git = "https://github.com/technobaboo/libmonado-rs.git" }

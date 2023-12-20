@@ -4,53 +4,98 @@ use stereokit::{
     *,
     named_colors::*
 };
+use open;
+
+#[derive(Clone,Copy)]
+struct OxrLauncherData {
+    menu_active: bool,
+    pub pos: Mat4,
+    pub orient: Vec3,
+}
+
+
+impl OxrLauncherData {
+    fn new() -> Self {
+        OxrLauncherData {
+            menu_active: true,
+            pos: Mat4::from_translation(vec3(0.0,0.0,-1.0)),
+            orient: vec3(0.0,0.0,1.0),
+        }
+    }
+    // get/set visibility of the launcher
+    pub fn active(self) -> bool {
+        self.menu_active
+    }
+    pub fn flip_vis(mut self) {
+        self.menu_active = !self.menu_active;
+    }
+
+    // draw the menu in preparation for transferring to the plane
+    pub fn construct_menu(mut self) {
+        todo!();
+    }
+}
 
 fn main() {
     let sk = crate::SettingsBuilder::new()
         .app_name("OpenXRLauncher")
+        .disable_desktop_input_window(true)
+        .overlay_app(true)
+        .overlay_priority(u32::MAX)
         .init()
         .unwrap();
     let mut menu_active: bool = false;
-    let up = vec3(0.0,1.0,0.0);
-    // let normal = vec3(0.0,0.0,1.0);
-    let dimensions = vec2(1.5, 1.0);
-    // let position = vec3(0.0,0.0,-1.0);
-    // let transform = Mat4::from_translation(position);
+    let mut launcher = OxrLauncherData::new();
+    
 
-    let cube = sk.mesh_gen_cube(vec3(1.0, 1.0,1.0), 0);
+    let up = vec3(0.0,1.0,0.0);
+    let dimensions = vec2(1.5, 1.0);
+
+    let mut menu_pos: Mat4 = Mat4::from_translation(vec3(0.0,0.0,-1.0));
+    let mut menu_orient: Vec3 = vec3(0.0,0.0,1.0);
 
     sk.run(|sk| {
+        menu_pos = menu_pos;
+        menu_orient = menu_orient;
+        let head = sk.input_head();
+        let mut head_pos = head.position;
+        //get the direction the user faces on the XZ plane (rotation around y)
+        let mut head_orient = head.orientation;
+        head_orient.x = 0.0;
+        head_orient.z = 0.0;
+        let _ = head_orient.normalize();
+
         // open menu on grip + menu (not system)
         if sk.input_controller_menu().contains(ButtonState::JUST_ACTIVE) && sk.input_controller(Handed::Left).grip == 1.0 {
-            if menu_active == true {
-                menu_active = false;
-            } else {
-                menu_active = true;
-            }
-            // draw menu
+            if launcher.active() == true {
+                // set position of menu to be drawn
+                let translation: Vec3 = head_pos + head_orient.mul_vec3(Vec3::NEG_Z);
+                launcher.pos = Mat4::from_translation(translation);
+                launcher.orient = head_orient.mul_vec3(Vec3::NEG_Z);
+            } 
+            launcher.flip_vis();
+            
         }
 
-        sk.mesh_draw(&cube, Material::UI, Mat4::from_translation(vec3(0.0,0.0,-1.0)), WHITE, RenderLayer::LAYER0);
-        if menu_active {
-            let head = sk.input_head();
-            let head_pos = head.position;
-            //get the direction the user faces on the XZ plane (rotation around y)
-            let mut head_orient = head.orientation;
-            head_orient.x = 0.0;
-            head_orient.z = 0.0;
-            let _ = head_orient.normalize();
+        if sk.input_controller_menu().contains(ButtonState::ACTIVE) && !(sk.input_controller(Handed::Left).grip == 1.0) {
+            start_steamvr(620980);
+        }
 
-            let translation: Vec3 = head_pos + head_orient.mul_vec3(Vec3::NEG_Z);
-            let menu_pos: Mat4 = Mat4::from_translation(translation);
 
-            // let theta: f32 = PI-(head_orient.y/head_orient.w).atan();
-            // let menu_quat = quat(0, head_orient.y, 0, head_orient.w).normalize();
-            let menu_orient: Vec3 = head_orient.mul_vec3(Vec3::NEG_Z);
-
-            let plane = sk.mesh_gen_plane(dimensions, menu_orient, up, 0, true);
+        if launcher.active() {
+            let plane = sk.mesh_gen_plane(dimensions, launcher.orient, up, 0, true);
             // draw menu
-            sk.mesh_draw(plane, Material::UI, menu_pos, BLUE, RenderLayer::LAYER0);
+            sk.mesh_draw(plane, Material::UI, launcher.pos, BLUE, RenderLayer::LAYER0);
         }
         
     }, |_| {});
+}
+
+fn start_steamvr(appid:u32 ) {
+    let id = appid.to_string();
+    let url = String::from("steam://rungameid/")+id.as_str();
+    match open::that(url){
+        Ok(()) => println!("opened steam app {} successfully", appid),
+        Err(_) => println!("couldn't open steam app {}", appid),
+    }
 }
