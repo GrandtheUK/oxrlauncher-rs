@@ -37,7 +37,7 @@ impl OxrLauncherData {
 }
 
 fn main() {
-    let sk = crate::SettingsBuilder::new()
+    let sk = SettingsBuilder::new()
         .app_name("OpenXRLauncher")
         .disable_desktop_input_window(true)
         .overlay_app(true)
