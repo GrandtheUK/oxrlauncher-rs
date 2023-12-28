@@ -17,7 +17,7 @@ struct OxrLauncherData {
 impl OxrLauncherData {
     fn new() -> Self {
         OxrLauncherData {
-            menu_active: true,
+            menu_active: false,
             pos: Mat4::from_translation(vec3(0.0,0.0,-1.0)),
             orient: vec3(0.0,0.0,1.0),
         }
@@ -44,21 +44,21 @@ fn main() {
         .overlay_priority(u32::MAX)
         .init()
         .unwrap();
-    let mut menu_active: bool = false;
+    // let mut menu_active:s bool = false;
     let mut launcher = OxrLauncherData::new();
-    
+
 
     let up = vec3(0.0,1.0,0.0);
     let dimensions = vec2(1.5, 1.0);
 
-    let mut menu_pos: Mat4 = Mat4::from_translation(vec3(0.0,0.0,-1.0));
-    let mut menu_orient: Vec3 = vec3(0.0,0.0,1.0);
+    // let mut menu_pos: Mat4 = Mat4::from_translation(vec3(0.0,0.0,-1.0));
+    // let mut menu_orient: Vec3 = vec3(0.0,0.0,1.0);
 
     sk.run(|sk| {
-        menu_pos = menu_pos;
-        menu_orient = menu_orient;
+        // menu_pos = menu_pos;
+        // menu_orient = menu_orient;
         let head = sk.input_head();
-        let mut head_pos = head.position;
+        let head_pos = head.position;
         //get the direction the user faces on the XZ plane (rotation around y)
         let mut head_orient = head.orientation;
         head_orient.x = 0.0;
