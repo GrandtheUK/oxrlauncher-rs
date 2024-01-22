@@ -3,20 +3,21 @@ use std::{
     thread,
     f32::consts::PI
 };
-mod game;
+mod util;
 
 use glam::*;
-use stereokit::*;
+use stereokit::{sys::{ui_window_begin, ui_window_end}, *};
 use sysinfo::System;
-use game::get_installed_steam_games;
+use device_query::{DeviceQuery,DeviceState,Keycode};
+use util::{Game,get_installed_steam_games};
 
-#[derive(Clone,Copy)]
+#[derive(Clone)]
 struct OxrLauncherData {
     pub visibility: bool,
     pose: Pose,
     dimensions: Vec2,
     pub pid: Option<u32>,
-
+    games: Vec<Game>
 }
 
 impl OxrLauncherData {
@@ -26,6 +27,7 @@ impl OxrLauncherData {
             pose: Pose::new( vec3( 0.0,-0.25,-1.0 ), Quat::default().mul_quat(Quat::from_rotation_y(PI)) ),
             dimensions: vec2( 1.5, 1.0 ),
             pid: None,
+            games: Vec::<Game>::new(),
         }
     }
     // get/set visibility of the launcher
@@ -34,23 +36,6 @@ impl OxrLauncherData {
     }
     pub fn flip_vis(mut self) {
         self.visibility = !self.visibility;
-    }
-
-    // draw the menu in preparation for transferring to the plane
-    pub fn construct_menu(mut self, sk: &SkDraw) {
-        sk.window("window_title", self.pose, self.dimensions, WindowType::Normal, MoveType::FaceUser, |ui| {
-            ui.button("Beat Saber").then(|| {
-                self.start_steam(620980);
-                let sys = System::new_all();
-                // let ten_seconds = time::Duration::from_millis(10000);
-                // thread::sleep(ten_seconds);
-                for process in sys.processes_by_name("Beat Saber") {
-                    let pid = process.pid();
-                    println!("Beat saber has pid: {}",pid.as_u32());
-                    self.pid = Some(pid.as_u32());
-                }
-            });
-        });
     }
 
 
@@ -82,6 +67,8 @@ fn main() {
     // let mut menu_orient: Vec3 = vec3(0.0,0.0,1.0);
     // let mut menu_visible = false;
 
+    let keyboard = DeviceState::new();
+
     sk.run(|sk| {
         // menu_pos = menu_pos;
         // menu_orient = menu_orient;
@@ -93,31 +80,27 @@ fn main() {
         head.orientation.z = 0.0;
         let _ = head.orientation.normalize();
 
+        
         // open menu on controller menu (not system)
-        if sk.input_controller_menu().contains(ButtonState::JUST_ACTIVE) {
+        if sk.input_controller_menu().contains(ButtonState::JUST_ACTIVE) || keyboard.get_keys().contains(&Keycode::Escape)  {
             println!("Menu pressed");
-            if launcher.visible() {
-            // if menu_visible == false {
-                // set position of menu to be drawn
+            if launcher.visibility == true {
                 let pos: Vec3 = head.position + head.orientation.mul_vec3(0.5 * Vec3::NEG_Z) + 0.25 * Vec3::Y;
                 launcher.pose = Pose::new(pos, head.orientation.mul_quat(Quat::from_rotation_y(PI)))
             } 
-            // menu_visible = !menu_visible;
-            launcher.flip_vis();
+
             
         }
-
-        // if sk.input_controller_menu().contains(ButtonState::ACTIVE) && !(sk.input_controller(Handed::Left).grip == 1.0) {
-        //     start_steamvr(620980);
-        // }
         
-        if launcher.visible() {
-        // if menu_visible {
-            // draw menu
-            launcher.construct_menu(sk);
-            
-
-            // sk.mesh_draw(plane, Material::UI, launcher.pos, BLUE, RenderLayer::LAYER0);
+        if launcher.visibility {
+            let games = launcher.games.clone();
+            sk.window("title",launcher.pose, launcher.dimensions, WindowType::Normal, MoveType::FaceUser, |ui| {
+                for game in games {
+                    ui.button("a").then(|| {
+                        let pid = thread::spawn(||{game.run()});
+                    });
+                } 
+            });
         }
         
     }, |_| {});
