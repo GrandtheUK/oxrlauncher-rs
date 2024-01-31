@@ -1,101 +1,95 @@
-use std::path::PathBuf;
-use std::{process, thread, time};
-use std::{process::{Command, Stdio}, io::{BufReader, BufRead}};
-use regex::Regex;
-use home::home_dir;
-use sysinfo::System;
+use std::{path::PathBuf, process::{self, Stdio}, thread, io::{self, BufReader}, fs::File, time::Duration, sync::mpsc::channel};
+use hotwatch::{blocking::{Hotwatch,Flow}, EventKind, Event, notify::event::{ModifyKind, DataChange}};
+use rev_lines::RevLines;
+use steamlocate::SteamDir;
+use sysinfo::{System, Pid, Process, ProcessStatus};
 
-pub fn get_installed_steam_games() -> Option<Vec<String>> {
-    let steam: String = home_dir().unwrap().to_str().unwrap().to_string() + "/.steam/root";
-    let pt = Command::new("protontricks")
-        .arg("-l")
-        .stdout(Stdio::piped())
-        .env("STEAM_DIR", &steam)
-        .spawn()
-        .expect("protontricks not found");
 
-    let mut res: Vec<String> = Vec::new();
-    let reg = Regex::new(r"\([0-9]+[0-9]?\)").unwrap();
-    let reg2 = Regex::new(r"[0-9]+[0-9]?").unwrap();
-    match pt.stdout {
-        Some(out) => {
-            let buf = BufReader::new(out);
-            for line in buf.lines() {
-                match line {
-                    Ok(l) => {
-                        for cap in reg.captures_iter(l.as_str()) {
-                            let mut id = cap[0].to_string();
-                            id = id[1..id.len()-1].to_string();
-                            res.push(id);
-                        }
-                    },
-                    Err(_) => {
-                        println!("line is error");
-                        return None
-                    }
+pub fn get_installed_steam_games() -> Vec<Game> {
+    let mut games: Vec<Game> = Vec::new();
+    let mut steamdir = SteamDir::locate().unwrap();
+    let mut s = steamdir.clone();
+    
+
+    let game_list = steamdir.apps();
+    let libraryfolders = s.libraryfolders();
+    let paths = &libraryfolders.paths;
+    for path in paths {
+        let p = path.clone();
+        println!("found library folder: {}", p.into_os_string().to_str().unwrap());
+    }
+
+    for game in game_list {
+        match game.1 {
+            Some(app) => {
+                let name = app.clone().name.unwrap();
+                if name.contains("Steamworks") || name.contains("Proton") || name.contains("Linux Runtime") || name.contains("SteamVR") {
+                    continue;
                 }
-            }
-        }
-        None => {
-            println!("stdout is none");
-            return None
+                let game = Game::new_steam(app.appid, app.name.as_ref().unwrap().to_owned());
+                games.push(game);
+            },
+            None => {},
         }
     }
-    Some(res)
-
+    games
 }
 
-#[derive(Clone)]
+#[derive(Debug,Clone)]
 pub enum Kind {
     STEAM,
     NONSTEAM,
 }
 
-#[derive(Clone)]
+#[derive(Debug,Clone)]
 pub struct Game 
 {
-    // pub name: String,
+    pub name: String,
     kind: Kind,
-    steamid: Option<u32>,
-    path: Option<PathBuf>,
+    pub steamid: Option<u32>,
+    pub path: Option<PathBuf>,
 }
 
 // steam game impl 
 impl Game {
     pub fn new_steam(id: u32, name: String) -> Self {
         Self {
-            // name, 
+            name, 
             kind: Kind::STEAM, 
             steamid: Some(id), 
             path: None,
         }
     }
 
-    async fn get_pid(self) -> Option<u32> {
-        let mut pids: Vec<u32> = Vec::<u32>::new();
-        if let Kind::NONSTEAM = self.kind {
-            return None
-        } else {
-            let sys = System::new_all();
-            let ten_seconds = time::Duration::from_millis(10000);
-            thread::sleep(ten_seconds);
-            for process in sys.processes_by_name("Beat Saber") {
-                let pid = process.pid();
-                println!("Beat saber has pid: {}",pid.as_u32());
-                pids.push(pid.as_u32());
-            }
-            Some(pids[0])
-        }
-    }
-
-    async fn run_steam(self) -> u32 {
+    fn run_steam(self) -> Option<u32> {
         let id = self.steamid.unwrap().to_string();
-        let url = String::from("steam://rungameid/")+id.as_str();
-        match process::Command::new("xdg-open").arg(url.as_str()).output() {
-            Ok(_) => println!("opened steam app successfully"),
+        let url = format!("steam://run/{}/-steamvr",id);
+        match process::Command::new("xdg-open").arg(url.as_str()).stdout(Stdio::null()).spawn() {
+            Ok(_) => (),
             Err(_) => println!("couldn't open steam app"),
         }
-        self.get_pid().await.unwrap()
+        let (tx,rx) = channel::<u32>();
+        println!("pre-thread");
+        let process_finder = thread::spawn(move || {
+            thread::sleep(Duration::from_secs(2));
+            let sys = sysinfo::System::new_all();
+            let p :Vec<_>= sys.processes_by_exact_name("reaper").collect();
+            let process = p[0];
+            if process.pid().as_u32() != 0 {
+                println!("process: {:#?}", process);
+                let _ = tx.send(process.pid().as_u32());
+            }
+        });
+        println!("post-thread");
+
+        let _ = process_finder.join();
+        match rx.recv() {
+            Ok(pid) => {
+                println!("PID: {}", pid);
+                Some(pid)
+            },
+            Err(_) => None,
+        }
     }
 }
 
@@ -103,18 +97,18 @@ impl Game {
 impl Game {
     pub fn new(name: String, path: PathBuf) -> Self {
         Self { 
-            // name: name, 
+            name: name, 
             kind: Kind::NONSTEAM, 
             steamid: None, 
             path: Some(path) 
         }
     }
 
-    async fn run_non_steam(self) -> Option<u32> {
+    fn run_non_steam(self) -> Option<u32> {
         match process::Command::new(self.path.unwrap().as_os_str()).spawn() {
-            Ok(c) => {
+            Ok(child) => {
                 println!("opened app successfully");
-                Some(c.id())
+                Some(child.id())
             },
             Err(_) => {
                 println!("couldn't open app");
@@ -125,10 +119,10 @@ impl Game {
 }
 
 impl Game {
-    pub async fn run(self) -> u32 {
+    pub fn run(self) -> Option<u32> {
         match self.kind {
-            Kind::STEAM => self.run_steam().await,
-            Kind::NONSTEAM => self.run_non_steam().await.unwrap(),
+            Kind::STEAM => self.run_steam(),
+            Kind::NONSTEAM => self.run_non_steam(),
         }
     }
 }

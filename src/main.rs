@@ -1,20 +1,16 @@
-use std::{
-    process,
-    thread,
-    f32::consts::PI
-};
-mod util;
-
-use glam::*;
-use stereokit::{sys::{ui_window_begin, ui_window_end}, *};
-use sysinfo::System;
+use std::f32::consts::PI;
 use device_query::{DeviceQuery,DeviceState,Keycode};
-use util::{Game,get_installed_steam_games};
+use glam::{Vec2, Vec3, Quat};
+use stereokit::{Pose, SettingsBuilder, StereoKitMultiThread, ButtonState, WindowType, MoveType, Handed};
+use steam_webapi_rust_sdk::{get_app_details,get_cached_app_details};
+
+mod util;
+use util::*;
 
 #[derive(Clone)]
 struct OxrLauncherData {
     pub visibility: bool,
-    pose: Pose,
+    pub pose: Pose,
     dimensions: Vec2,
     pub pid: Option<u32>,
     games: Vec<Game>
@@ -24,22 +20,14 @@ impl OxrLauncherData {
     fn new() -> Self {
         OxrLauncherData {
             visibility: true,
-            pose: Pose::new( vec3( 0.0,-0.25,-1.0 ), Quat::default().mul_quat(Quat::from_rotation_y(PI)) ),
-            dimensions: vec2( 1.5, 1.0 ),
+            pose: Pose::new( Vec3::new( 0.0,-0.25,-1.0 ), Quat::default().mul_quat(Quat::from_rotation_y(PI)) ),
+            dimensions: Vec2::new( 0.75, 0.5 ),
             pid: None,
-            games: Vec::<Game>::new(),
+            games: Vec::<Game>::new()
         }
     }
-    // get/set visibility of the launcher
-    pub fn visible(self) -> bool {
-        self.visibility
-    }
-    pub fn flip_vis(mut self) {
-        self.visibility = !self.visibility;
-    }
-
-
 }
+
 
 fn main() {
     let sk = SettingsBuilder::new()
@@ -49,57 +37,74 @@ fn main() {
         .overlay_priority(u32::MAX)
         .init()
         .unwrap();
-    // let mut menu_active:s bool = false;
     let mut launcher = OxrLauncherData::new();
-    thread::spawn(|| {
-        let games = get_installed_steam_games();
-        match games {
-            Some(g) => println!("things good"),
-            None => println!("not good")
+    let games = get_installed_steam_games();
+    let mut filtered_games = Vec::<Game>::new();
+
+    println!("Attempting to get Appdetails of installed games through SteamCMD API and storing in cache. If no games show up, then accessing local cache or API may have failed.");
+    for game in games {
+        let details = match get_cached_app_details(game.steamid.unwrap().into()) {
+            Ok(detail) => {
+                detail
+            },
+            Err(_) => match get_app_details(game.steamid.unwrap().into()) {
+                Ok(detail) => {
+                    detail
+                },
+                Err(_) => {
+                    println!("could not get appdetails for game {}", game.name);
+                    continue
+                },
+            },
+        };
+        for category in details.categories.into_iter() {
+            if category.id == 53 || category.id == 54  {
+                filtered_games.push(game.clone());
+            }
         }
-    });
-    
+    }
 
-    let up = vec3(0.0,1.0,0.0);
-    let dimensions = vec2(1.5, 1.0);
-
-    // let mut menu_pos: Mat4 = Mat4::from_translation(vec3(0.0,0.0,-1.0));
-    // let mut menu_orient: Vec3 = vec3(0.0,0.0,1.0);
-    // let mut menu_visible = false;
+    launcher.games.append(&mut filtered_games);
 
     let keyboard = DeviceState::new();
 
+    
     sk.run(|sk| {
-        // menu_pos = menu_pos;
-        // menu_orient = menu_orient;
         let mut head = sk.input_head();
-        // let head_pos = head.position;
-        //get the direction the user faces on the XZ plane (rotation around y)
-        // let mut head_orient = head.orientation;
         head.orientation.x = 0.0;
         head.orientation.z = 0.0;
         let _ = head.orientation.normalize();
 
+        // get vector for controller to headset
+        let palm = sk.input_controller(Handed::Left).palm;
+        let to_face = sk.input_controller(Handed::Left).pose.position - sk.input_head().position;
         
-        // open menu on controller menu (not system)
-        if sk.input_controller_menu().contains(ButtonState::JUST_ACTIVE) || keyboard.get_keys().contains(&Keycode::Escape)  {
+        // open menu on controller menu and grip when controller palm is facing headset
+        if ( sk.input_controller_menu().contains(ButtonState::JUST_ACTIVE) && sk.input_controller(Handed::Left).grip > 0.5 && to_face.dot(palm.forward()).abs() < 0.15) || keyboard.get_keys().contains(&Keycode::Escape)  {
             println!("Menu pressed");
+            launcher.visibility = !launcher.visibility;
             if launcher.visibility == true {
-                let pos: Vec3 = head.position + head.orientation.mul_vec3(0.5 * Vec3::NEG_Z) + 0.25 * Vec3::Y;
+                let pos: Vec3 = head.position + head.orientation.mul_vec3(0.7 * Vec3::NEG_Z) + 0.125 * Vec3::Y;
                 launcher.pose = Pose::new(pos, head.orientation.mul_quat(Quat::from_rotation_y(PI)))
             } 
-
-            
         }
         
         if launcher.visibility {
             let games = launcher.games.clone();
-            sk.window("title",launcher.pose, launcher.dimensions, WindowType::Normal, MoveType::FaceUser, |ui| {
-                for game in games {
-                    ui.button("a").then(|| {
-                        let pid = thread::spawn(||{game.run()});
-                    });
-                } 
+            sk.window("title",&mut launcher.pose, launcher.dimensions, WindowType::Normal, MoveType::FaceUser, |ui| {
+                if let Some(_) = launcher.pid {
+                    
+                } else {
+                    for game in games {
+                        // println!("{}",game.name);
+                        ui.same_line();
+                        let name = game.name.clone();
+                        ui.button(name).then(|| {
+                            println!("game start");
+                            launcher.pid = game.run();
+                        });
+                    }
+                }
             });
         }
         
