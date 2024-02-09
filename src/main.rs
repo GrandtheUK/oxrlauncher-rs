@@ -1,18 +1,27 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, sync::mpsc, thread};
 use device_query::{DeviceQuery,DeviceState,Keycode};
 use glam::{Vec2, Vec3, Quat};
 use stereokit::{Pose, SettingsBuilder, StereoKitMultiThread, ButtonState, WindowType, MoveType, Handed};
 use steam_webapi_rust_sdk::{get_app_details,get_cached_app_details};
 
 mod util;
+use sysinfo::{Pid, ProcessStatus, System};
 use util::*;
+
+#[derive(Clone,Copy)]
+enum LauncherState {
+    GameNotStarted,
+    GameStarting,
+    GameRunning(u32),
+}
 
 #[derive(Clone)]
 struct OxrLauncherData {
     pub visibility: bool,
     pub pose: Pose,
     dimensions: Vec2,
-    pub pid: Option<u32>,
+    // pub pid: Option<u32>,
+    pub status: LauncherState,
     games: Vec<Game>
 }
 
@@ -22,7 +31,8 @@ impl OxrLauncherData {
             visibility: true,
             pose: Pose::new( Vec3::new( 0.0,-0.25,-1.0 ), Quat::default().mul_quat(Quat::from_rotation_y(PI)) ),
             dimensions: Vec2::new( 0.75, 0.5 ),
-            pid: None,
+            // pid: None,
+            status: LauncherState::GameNotStarted,
             games: Vec::<Game>::new()
         }
     }
@@ -68,7 +78,9 @@ fn main() {
 
     let keyboard = DeviceState::new();
 
-    
+    let (pid_tx, pid_rx) = mpsc::channel::<u32>();
+    let (status_tx, status_rx) = mpsc::channel::<LauncherState>();
+
     sk.run(|sk| {
         let mut head = sk.input_head();
         head.orientation.x = 0.0;
@@ -89,20 +101,59 @@ fn main() {
             } 
         }
         
+        // Receive pid from process and track until dead
+        match pid_rx.try_recv() {
+            Ok(id) => {
+                // launcher.pid = Some(id);
+                launcher.status = LauncherState::GameRunning(id);
+                let tx = status_tx.clone();
+                thread::spawn(move || {
+                    let sys = System::new_all();
+                    let pid = Pid::from_u32(id);
+                    let process = sys.process(pid).unwrap();
+                    while process.status() != ProcessStatus::Dead {
+                        println!("app is still alive. status is {}", process.status());
+                    }
+                    // launcher.pid = None;
+                    let _ = tx.clone().send(LauncherState::GameNotStarted);
+                });
+            },
+            Err(_) => ()
+        }
+
+        match status_rx.try_recv() {
+            Ok(status) => {
+                launcher.status = status;
+            },
+            Err(_) => (),
+        }
+
         if launcher.visibility {
             let games = launcher.games.clone();
             sk.window("title",&mut launcher.pose, launcher.dimensions, WindowType::Normal, MoveType::FaceUser, |ui| {
-                if let Some(_) = launcher.pid {
-                    
-                } else {
-                    for game in games {
-                        // println!("{}",game.name);
-                        ui.same_line();
-                        let name = game.name.clone();
-                        ui.button(name).then(|| {
-                            println!("game start");
-                            launcher.pid = game.run();
-                        });
+                match launcher.status {
+                    LauncherState::GameNotStarted => {
+                        for game in games {
+                            // println!("{}",game.name);
+                            ui.same_line();
+                            let name = game.name.clone();
+                            if ui.button(name) {
+                                launcher.status = LauncherState::GameStarting;
+                                println!("game start");
+                                game.run(pid_tx.clone());
+                            }
+                        }
+                    },
+                    LauncherState::GameStarting => {
+                        ui.label("Starting game", true);
+                    },
+                    LauncherState::GameRunning(pid) => {
+                        ui.label("Game running", true);
+                        if ui.button("Kill") {
+                            let sys = System::new_all();
+                            let process = sys.process(Pid::from_u32(pid)).unwrap();
+                            process.kill();
+                        }
                     }
                 }
             });
