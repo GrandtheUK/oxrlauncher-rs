@@ -1,6 +1,13 @@
 use std::{path::PathBuf, process};
 use steamlocate::SteamDir;
+use std::sync::mpsc;
 
+#[derive(Clone,Copy)]
+pub enum LauncherState {
+    GameNotStarted,
+    GameRunning(u32),
+    SteamGameRunning(u32),
+}
 
 pub fn get_installed_steam_games() -> Vec<Game> {
     let mut games: Vec<Game> = Vec::new();
@@ -58,13 +65,14 @@ impl Game {
         }
     }
 
-    fn run_steam(self) {
-        let id = self.steamid.unwrap().to_string();
+    fn run_steam(self, tx: mpsc::Sender<LauncherState>) {
+        let id = self.steamid.clone().unwrap();
         let url = format!("steam://launch/{}/vr",id);
         match process::Command::new("xdg-open").arg(url.as_str()).stdout(process::Stdio::null()).output() {
             Ok(_) => (),
             Err(_) => println!("couldn't open steam app"),
         }
+        let _ = tx.send(LauncherState::SteamGameRunning(id));
     }
 }
 
@@ -79,10 +87,11 @@ impl Game {
         }
     }
 
-    fn run_non_steam(self) {
+    fn run_non_steam(self, tx: mpsc::Sender<LauncherState>) {
         match process::Command::new(self.path.unwrap().as_os_str()).spawn() {
-            Ok(_) => {
+            Ok(child) => {
                 println!("opened non-steam app successfully");
+                let _ = tx.send(LauncherState::GameRunning(child.id()));
             },
             Err(_) => {
                 println!("couldn't open app");
@@ -92,10 +101,10 @@ impl Game {
 }
 
 impl Game {
-    pub fn run(self) {
+    pub fn run(self, tx: mpsc::Sender<LauncherState>){
         match self.kind {
-            Kind::STEAM => self.run_steam(),
-            Kind::NONSTEAM => self.run_non_steam(),
+            Kind::STEAM => self.run_steam(tx),
+            Kind::NONSTEAM => self.run_non_steam(tx),
         }
     }
 }

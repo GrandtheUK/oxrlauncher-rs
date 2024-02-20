@@ -1,24 +1,17 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, sync::mpsc, process};
 use glam::{Vec2, Vec3, Quat};
 use stereokit::{Pose, SettingsBuilder, StereoKitMultiThread, ButtonState, WindowType, MoveType, Handed};
 use steam_webapi_rust_sdk::{get_app_details,get_cached_app_details};
 
 mod util;
+use sysinfo::System;
 use util::*;
-
-#[derive(Clone,Copy)]
-enum LauncherState {
-    GameNotStarted,
-    GameStarting,
-    GameRunning(u32),
-}
 
 #[derive(Clone)]
 struct OxrLauncherData {
     pub visibility: bool,
     pub pose: Pose,
     dimensions: Vec2,
-    // pub pid: Option<u32>,
     pub status: LauncherState,
     games: Vec<Game>
 }
@@ -72,6 +65,8 @@ fn main() {
         }
     }
 
+    let (tx_state,rx_state) = mpsc::channel::<LauncherState>();
+
     launcher.games.append(&mut filtered_games);
 
     sk.run(|sk| {
@@ -83,6 +78,11 @@ fn main() {
         // get vector for controller to headset
         let palm = sk.input_controller(Handed::Left).palm;
         let to_face = sk.input_controller(Handed::Left).pose.position - sk.input_head().position;
+
+        match rx_state.try_recv() {
+            Ok(value) => launcher.status = value,
+            Err(_) => (),
+        }
         
         // open menu on controller menu and grip when controller palm is facing headset
         if sk.input_controller_menu().contains(ButtonState::JUST_ACTIVE) && sk.input_controller(Handed::Left).grip > 0.5 && to_face.dot(palm.forward()).abs() < 0.15  {
@@ -97,17 +97,54 @@ fn main() {
         if launcher.visibility {
             let games = launcher.games.clone();
             sk.window("title",&mut launcher.pose, launcher.dimensions, WindowType::Normal, MoveType::FaceUser, |ui| {
-                for game in games {
-                    // println!("{}",game.name);
-                    ui.same_line();
-                    let name = game.name.clone();
-                    if ui.button(&name) {
-                        launcher.status = LauncherState::GameStarting;
-                        println!("starting {}",&name);
-                        game.run();
-                        // move receiver into launcher state
+                match launcher.status {
+                    LauncherState::GameNotStarted => {
+                        for game in games {
+                            // println!("{}",game.name);
+                            ui.same_line();
+                            let name = game.name.clone();
+                            if ui.button(&name) {
+                                println!("starting {}",&name);
+                                game.run(tx_state.clone());
+                            }
+                        };
+                    },
+                    LauncherState::SteamGameRunning(steamid) => {
+                        let name = get_cached_app_details(steamid as i64).unwrap().name;
+                        ui.label(format!("Currently playing: {}",name), true);
+                        if ui.button("kill game") {
+                            let sys = System::new_all();
+                            let mut processes = sys.processes_by_exact_name("reaper");
+                            loop {
+                                match processes.next() {
+                                    Some(process) => {
+                                        for command in process.cmd() {
+                                            if command.contains("common") && !command.contains("entry-point") {
+                                                let binary_path: Vec<&str> = command.split("/").collect();
+                                                let binary = binary_path.last().unwrap().to_string();
+                                                
+                                                if binary.to_owned() == "proton" {
+                                                    let proton = sys.processes_by_name("pressure-vessel").next().unwrap();
+                                                    let ppid = proton.pid().as_u32();
+            
+                                                    let _ = process::Command::new("pkill").arg("-9").arg("python3").arg("-n").output().unwrap();
+                                                    let _ = process::Command::new("pkill").arg("-9").arg("-P").arg(ppid.to_string()).arg("-n").output().unwrap();
+                                                    println!("end of run_steam tracking. program should be dead");
+                                                    break;
+                                                } else {
+                                                    let _ = process::Command::new("pkill").arg("-9").arg("-f").arg(binary).output().unwrap();
+                                                }
+                                            }
+                                        }
+                                    },
+                                    None => break,
+                                }
+                            };
+                            launcher.status = LauncherState::GameNotStarted;
+                        }
                     }
-                };
+                    LauncherState::GameRunning(_pid) => (), // TODO: Non-steam game
+                }
             });
         }
         
