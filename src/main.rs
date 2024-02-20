@@ -103,15 +103,14 @@ fn main() {
                 match launcher.status {
                     LauncherState::GameNotStarted => {
                         for game in games {
+                            let name = game.name.clone();
                             let sprite_path = library_icon_path.clone()+game.steamid.unwrap().to_string().as_str()+"_library_600x900.jpg";
-                            match sk.sprite_create_file(sprite_path, stereokit::SpriteType::Single, "0".to_string()) {
-                                Ok(sprite) => (),
-                                Err(e) => println!("Error loading sprite: {}",e),
-                            }
+                            let mut sprite = sk.sprite_create_file(sprite_path, stereokit::SpriteType::Single, "0".to_string()).unwrap();
+                            
                             // println!("{}",game.name);
                             ui.same_line();
-                            let name = game.name.clone();
-                            if ui.button(&name) {
+                            
+                            if ui.button_img(&name, &mut sprite, stereokit::UiBtnLayout::Centre) {
                                 println!("starting {}",&name);
                                 game.run(tx_state.clone());
                             }

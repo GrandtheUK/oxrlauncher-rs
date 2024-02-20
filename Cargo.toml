@@ -10,5 +10,5 @@ glam = "0.23.0"
 open = "5.0.1"
 steam-webapi-rust-sdk = "0.0.8"
 steamlocate = "1.2.1"
-stereokit = "0.16.8"
+stereokit = { path = "./stereokit-rs" }
 sysinfo = "0.30.5"
