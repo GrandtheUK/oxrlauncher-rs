@@ -34,13 +34,14 @@ fn main() {
     let sk = SettingsBuilder::new()
         .app_name("OpenXRLauncher")
         .disable_desktop_input_window(true)
-        .overlay_app(true)
+        .display_preference(stereokit::DisplayMode::MixedReality)
         .overlay_priority(u32::MAX)
         .init()
         .unwrap();
     let mut launcher = OxrLauncherData::new();
     let games = get_installed_steam_games();
     let mut filtered_games = Vec::<Game>::new();
+    let library_icon_path = String::from("/home/ben/.steam/steam/appcache/librarycache/");
 
     println!("Attempting to get Appdetails of installed games through SteamCMD API and storing in cache. If no games show up, then accessing local cache or API may have failed.");
     for game in games {
@@ -100,6 +101,11 @@ fn main() {
                 match launcher.status {
                     LauncherState::GameNotStarted => {
                         for game in games {
+                            let sprite_path = library_icon_path.clone()+game.steamid.unwrap().to_string().as_str()+"_library_600x900.jpg";
+                            match sk.sprite_create_file(sprite_path, stereokit::SpriteType::Single, "0".to_string()) {
+                                Ok(sprite) => (),
+                                Err(e) => println!("Error loading sprite: {}",e),
+                            }
                             // println!("{}",game.name);
                             ui.same_line();
                             let name = game.name.clone();
