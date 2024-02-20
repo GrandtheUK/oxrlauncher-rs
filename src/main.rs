@@ -13,7 +13,8 @@ struct OxrLauncherData {
     pub pose: Pose,
     dimensions: Vec2,
     pub status: LauncherState,
-    games: Vec<Game>
+    games: Vec<Game>,
+    overlays: Vec<Overlay>
 }
 
 impl OxrLauncherData {
@@ -24,7 +25,8 @@ impl OxrLauncherData {
             dimensions: Vec2::new( 0.75, 0.5 ),
             // pid: None,
             status: LauncherState::GameNotStarted,
-            games: Vec::<Game>::new()
+            games: Vec::<Game>::new(),
+            overlays: Vec::<Overlay>::new()
         }
     }
 }

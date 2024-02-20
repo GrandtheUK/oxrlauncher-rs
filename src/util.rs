@@ -2,6 +2,13 @@ use std::{path::PathBuf, process};
 use steamlocate::SteamDir;
 use std::sync::mpsc;
 
+#[derive(Clone)]
+pub struct Overlay {
+    pid: u32,
+    name: String,
+    executable: PathBuf,
+}
+
 #[derive(Clone,Copy)]
 pub enum LauncherState {
     GameNotStarted,
