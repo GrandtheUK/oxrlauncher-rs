@@ -469,8 +469,9 @@ dependencies = [
 
 [[package]]
 name = "openxrlauncher-rs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "dirs",
  "glam",
  "open",
  "steam-webapi-rust-sdk",
@@ -819,6 +820,7 @@ dependencies = [
 [[package]]
 name = "stereokit"
 version = "0.16.9"
+source = "git+https://github.com/GrandtheUK/stereokit-rs.git#ba39d3322682f50033f11a98b08b46462e818ac3"
 dependencies = [
  "bitflags 1.3.2",
  "concat-idents",
@@ -834,6 +836,7 @@ dependencies = [
 [[package]]
 name = "stereokit-sys"
 version = "2.5.6"
+source = "git+https://github.com/MalekiRe/stereokit-sys.git#b85ab6d57aa7193fb8bd19bca36ae0432bd5b599"
 dependencies = [
  "bindgen",
  "cmake",

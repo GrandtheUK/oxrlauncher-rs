@@ -1,7 +1,8 @@
-use std::{f32::consts::PI, sync::mpsc, process};
+use std::{f32::consts::PI, sync::mpsc, process, collections::HashMap};
 use glam::{Vec2, Vec3, Quat};
-use stereokit::{Pose, SettingsBuilder, StereoKitMultiThread, ButtonState, WindowType, MoveType, Handed};
+use stereokit::{Pose, SettingsBuilder, StereoKitMultiThread, ButtonState, WindowType, MoveType, Handed, Sprite};
 use steam_webapi_rust_sdk::{get_app_details,get_cached_app_details};
+use dirs::home_dir;
 
 mod util;
 use sysinfo::System;
@@ -14,7 +15,6 @@ struct OxrLauncherData {
     dimensions: Vec2,
     pub status: LauncherState,
     games: Vec<Game>,
-    overlays: Vec<Overlay>
 }
 
 impl OxrLauncherData {
@@ -26,7 +26,6 @@ impl OxrLauncherData {
             // pid: None,
             status: LauncherState::GameNotStarted,
             games: Vec::<Game>::new(),
-            overlays: Vec::<Overlay>::new()
         }
     }
 }
@@ -36,14 +35,15 @@ fn main() {
     let sk = SettingsBuilder::new()
         .app_name("OpenXRLauncher")
         .disable_desktop_input_window(true)
-        .display_preference(stereokit::DisplayMode::MixedReality)
         .overlay_priority(u32::MAX)
         .init()
         .unwrap();
     let mut launcher = OxrLauncherData::new();
     let games = get_installed_steam_games();
     let mut filtered_games = Vec::<Game>::new();
-    let library_icon_path = String::from("/home/ben/.steam/steam/appcache/librarycache/");
+    let library_icon_path: String = home_dir().unwrap().as_mut_os_string().to_str().unwrap().to_string() + "/.steam/steam/appcache/librarycache/";
+    let mut library_icons: HashMap<u32, Sprite> = HashMap::new();
+    let mut library_banners: HashMap<u32, Sprite> = HashMap::new();
 
     println!("Attempting to get Appdetails of installed games through SteamCMD API and storing in cache. If no games show up, then accessing local cache or API may have failed.");
     for game in games {
@@ -64,6 +64,16 @@ fn main() {
         for category in details.categories.into_iter() {
             if category.id == 53 || category.id == 54  {
                 filtered_games.push(game.clone());
+
+                let icon_path = library_icon_path.clone()+game.steamid.unwrap().to_string().as_str()+"_library_600x900.jpg";
+                let icon_sprite = sk.sprite_create_file(icon_path, stereokit::SpriteType::Single, "0".to_string()).unwrap();
+
+                let banner_path = library_icon_path.clone()+game.steamid.unwrap().to_string().as_str()+"_library_600x900.jpg";
+                let banner_sprite = sk.sprite_create_file(banner_path, stereokit::SpriteType::Single, "0".to_string()).unwrap();
+
+
+                library_banners.insert(game.steamid.unwrap().clone(), banner_sprite);
+                library_icons.insert(game.steamid.unwrap().clone(), icon_sprite);
             }
         }
     }
@@ -99,24 +109,24 @@ fn main() {
 
         if launcher.visibility {
             let games = launcher.games.clone();
-            sk.window("title",&mut launcher.pose, launcher.dimensions, WindowType::Normal, MoveType::FaceUser, |ui| {
+            sk.window("OpenXR Launcher",&mut launcher.pose, launcher.dimensions, WindowType::Normal, MoveType::FaceUser, |ui| {
                 match launcher.status {
                     LauncherState::GameNotStarted => {
                         for game in games {
                             let name = game.name.clone();
-                            let sprite_path = library_icon_path.clone()+game.steamid.unwrap().to_string().as_str()+"_library_600x900.jpg";
-                            let mut sprite = sk.sprite_create_file(sprite_path, stereokit::SpriteType::Single, "0".to_string()).unwrap();
-                            
+                            let sprite = library_icons.get_mut(&game.steamid.unwrap()).unwrap();
                             // println!("{}",game.name);
                             ui.same_line();
                             
-                            if ui.button_img(&name, &mut sprite, stereokit::UiBtnLayout::Centre) {
+                            if ui.button_img_size(&"", sprite, stereokit::UiBtnLayout::Centre, Vec2::new(0.08,0.12)) {
                                 println!("starting {}",&name);
                                 game.run(tx_state.clone());
                             }
                         };
                     },
                     LauncherState::SteamGameRunning(steamid) => {
+                        let sprite = library_banners.get_mut(&steamid).unwrap();
+                        ui.image(sprite,Vec2::new(0.6,0.28));
                         let name = get_cached_app_details(steamid as i64).unwrap().name;
                         ui.label(format!("Currently playing: {}",name), true);
                         if ui.button("kill game") {
