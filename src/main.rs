@@ -1,6 +1,6 @@
 use std::{f32::consts::PI, sync::mpsc, process, collections::HashMap};
 use glam::{Vec2, Vec3, Quat};
-use stereokit::{Pose, SettingsBuilder, StereoKitMultiThread, ButtonState, WindowType, MoveType, Handed, Sprite};
+use stereokit::{Pose, SettingsBuilder, StereoKitMultiThread, ButtonState, WindowType, MoveType, Handed, Sprite, DisplayMode, DisplayBlend, DepthMode};
 use steam_webapi_rust_sdk::{get_app_details,get_cached_app_details};
 use dirs::home_dir;
 
@@ -20,7 +20,7 @@ struct OxrLauncherData {
 impl OxrLauncherData {
     fn new() -> Self {
         OxrLauncherData {
-            visibility: true,
+            visibility: false,
             pose: Pose::new( Vec3::new( 0.0,-0.25,-1.0 ), Quat::default().mul_quat(Quat::from_rotation_y(PI)) ),
             dimensions: Vec2::new( 0.75, 0.5 ),
             // pid: None,
@@ -32,12 +32,26 @@ impl OxrLauncherData {
 
 
 fn main() {
-    let sk = SettingsBuilder::new()
-        .app_name("OpenXRLauncher")
-        .disable_desktop_input_window(true)
-        .overlay_priority(u32::MAX)
-        .init()
-        .unwrap();
+    // let sk = SettingsBuilder::new()
+    //     .app_name("OpenXRLauncher")
+    //     .overlay_app(true)
+    //     .overlay_priority(u32::MAX)
+    //     .display_preference(DisplayMode::MixedReality)
+    //     .blend_preference(DisplayBlend::AnyTransparent)
+    //     .init()
+    //     .unwrap();
+    let sk = stereokit::Settings {
+        app_name: "OpenXRLauncher".to_string(),
+        display_preference: DisplayMode::MixedReality,
+        blend_preference: DisplayBlend::AnyTransparent,
+        depth_mode: DepthMode::D32,
+        overlay_app: true,
+        overlay_priority: 1u32,
+        disable_desktop_input_window: true,
+        ..Default::default()
+    }
+    .init()
+    .expect("StereoKit init fail!");
     let mut launcher = OxrLauncherData::new();
     let games = get_installed_steam_games();
     let mut filtered_games = Vec::<Game>::new();

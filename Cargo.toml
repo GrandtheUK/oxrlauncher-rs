@@ -11,5 +11,6 @@ glam = "0.23.0"
 open = "5.0.1"
 steam-webapi-rust-sdk = "0.0.8"
 steamlocate = "1.2.1"
-stereokit = { git = "https://github.com/GrandtheUK/stereokit-rs.git" }
+#stereokit = { version = "0.16.9", features=["linux-egl"], default-features = false }
+stereokit = { path = "../stereokit-rs", features=["linux-egl"], default-features = false }
 sysinfo = "0.30.5"
