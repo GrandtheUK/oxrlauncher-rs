@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, sync::mpsc, process, collections::HashMap};
+use std::{f32::consts::PI, sync::mpsc, process, collections::HashMap, thread, time::Duration};
 use glam::{Vec2, Vec3, Quat};
 use stereokit::{Pose, SettingsBuilder, StereoKitMultiThread, ButtonState, WindowType, MoveType, Handed, Sprite, DisplayMode, DisplayBlend, DepthMode};
 use steam_webapi_rust_sdk::{get_app_details,get_cached_app_details};
@@ -46,12 +46,13 @@ fn main() {
         blend_preference: DisplayBlend::AnyTransparent,
         depth_mode: DepthMode::D32,
         overlay_app: true,
-        overlay_priority: 1u32,
+        overlay_priority: u32::MAX,
         disable_desktop_input_window: true,
         ..Default::default()
     }
     .init()
     .expect("StereoKit init fail!");
+
     let mut launcher = OxrLauncherData::new();
     let games = get_installed_steam_games();
     let mut filtered_games = Vec::<Game>::new();
@@ -82,7 +83,7 @@ fn main() {
                 let icon_path = library_icon_path.clone()+game.steamid.unwrap().to_string().as_str()+"_library_600x900.jpg";
                 let icon_sprite = sk.sprite_create_file(icon_path, stereokit::SpriteType::Single, "0".to_string()).unwrap();
 
-                let banner_path = library_icon_path.clone()+game.steamid.unwrap().to_string().as_str()+"_library_600x900.jpg";
+                let banner_path = library_icon_path.clone()+game.steamid.unwrap().to_string().as_str()+"_header.jpg";
                 let banner_sprite = sk.sprite_create_file(banner_path, stereokit::SpriteType::Single, "0".to_string()).unwrap();
 
 
@@ -122,6 +123,8 @@ fn main() {
         }
 
         if launcher.visibility {
+            sk.input_hand_visible(Handed::Left, true);
+            sk.input_hand_visible(Handed::Right, true);
             let games = launcher.games.clone();
             sk.window("OpenXR Launcher",&mut launcher.pose, launcher.dimensions, WindowType::Normal, MoveType::FaceUser, |ui| {
                 match launcher.status {
@@ -151,17 +154,31 @@ fn main() {
                                     Some(process) => {
                                         for command in process.cmd() {
                                             if command.contains("common") && !command.contains("entry-point") {
+                                                println!("{:#?}", command);
                                                 let binary_path: Vec<&str> = command.split("/").collect();
                                                 let binary = binary_path.last().unwrap().to_string();
                                                 
                                                 if binary.to_owned() == "proton" {
-                                                    let proton = sys.processes_by_name("pressure-vessel").next().unwrap();
-                                                    let ppid = proton.pid().as_u32();
-            
-                                                    let _ = process::Command::new("pkill").arg("-9").arg("python3").arg("-n").output().unwrap();
-                                                    let _ = process::Command::new("pkill").arg("-9").arg("-P").arg(ppid.to_string()).arg("-n").output().unwrap();
-                                                    println!("end of run_steam tracking. program should be dead");
-                                                    break;
+                                                    let mut proton: Option<&sysinfo::Process> = None;
+                                                    for process in sys.processes_by_name("pressure-vessel") {
+                                                        let search = format!("SteamAppId={}",steamid);
+                                                        if process.environ().contains(&search) {
+                                                            proton = Some(process);
+                                                        }
+                                                    }
+                                                    match proton {
+                                                        Some(_) => println!("got a process"),
+                                                        None => break,  
+                                                    };
+                                                    let ppid = proton.unwrap().pid().as_u32();
+                                                    println!("killing PID {} and children",ppid);
+                                                    // why am i killing it twice? ask god for i dont have the answer
+                                                    thread::spawn(move || {
+                                                        let _ = process::Command::new("pkill").arg("-9").arg("-P").arg(ppid.to_string()).arg("python").output().unwrap();
+                                                        let _ = process::Command::new("pkill").arg("-9").arg("-P").arg(ppid.to_string()).arg("wine64").output().unwrap();
+                                                        let _ = process::Command::new("pkill").arg("-9").arg("-P").arg(ppid.to_string()).output().unwrap();
+                                                        let _ = process::Command::new("pkill").arg("-9").arg("-P").arg(ppid.to_string()).output().unwrap();
+                                                    });
                                                 } else {
                                                     let _ = process::Command::new("pkill").arg("-9").arg("-f").arg(binary).output().unwrap();
                                                 }
@@ -177,6 +194,9 @@ fn main() {
                     LauncherState::GameRunning(_pid) => (), // TODO: Non-steam game
                 }
             });
+        } else {
+            sk.input_hand_visible(Handed::Left, false);
+            sk.input_hand_visible(Handed::Right, false);
         }
         
     }, |_| {});
