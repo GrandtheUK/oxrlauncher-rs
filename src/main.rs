@@ -114,7 +114,7 @@ fn main() {
         
         // open menu on controller menu and grip when controller palm is facing headset
         if sk.input_controller_menu().contains(ButtonState::JUST_ACTIVE) && sk.input_controller(Handed::Left).grip > 0.5 && to_face.dot(palm.forward()).abs() < 0.15  {
-            println!("Menu pressed");
+            // println!("Menu pressed");
             launcher.visibility = !launcher.visibility;
             if launcher.visibility == true {
                 let pos: Vec3 = head.position + head.orientation.mul_vec3(0.7 * Vec3::NEG_Z) + 0.125 * Vec3::Y;
@@ -154,7 +154,7 @@ fn main() {
                                     Some(process) => {
                                         for command in process.cmd() {
                                             if command.contains("common") && !command.contains("entry-point") {
-                                                println!("{:#?}", command);
+                                                // println!("{:#?}", command);
                                                 let binary_path: Vec<&str> = command.split("/").collect();
                                                 let binary = binary_path.last().unwrap().to_string();
                                                 
@@ -171,7 +171,7 @@ fn main() {
                                                         None => break,  
                                                     };
                                                     let ppid = proton.unwrap().pid().as_u32();
-                                                    println!("killing PID {} and children",ppid);
+                                                    // println!("killing PID {} and children",ppid);
                                                     // why am i killing it twice? ask god for i dont have the answer
                                                     thread::spawn(move || {
                                                         let _ = process::Command::new("pkill").arg("-9").arg("-P").arg(ppid.to_string()).arg("python").output().unwrap();
