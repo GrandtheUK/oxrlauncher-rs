@@ -20,7 +20,7 @@ struct OxrLauncherData {
 impl OxrLauncherData {
     fn new() -> Self {
         OxrLauncherData {
-            visibility: false,
+            visibility: true,
             pose: Pose::new( Vec3::new( 0.0,-0.25,-1.0 ), Quat::default().mul_quat(Quat::from_rotation_y(PI)) ),
             dimensions: Vec2::new( 0.75, 0.5 ),
             // pid: None,

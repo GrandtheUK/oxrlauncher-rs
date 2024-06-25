@@ -237,9 +237,6 @@ name = "glam"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e4afd9ad95555081e109fe1d21f2a30c691b5f0919c67dfa690a2e1eb6bd51c"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "glob"
@@ -835,8 +832,7 @@ dependencies = [
 [[package]]
 name = "stereokit-sys"
 version = "2.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54ebf7419a56e4a6b1c361e8a7219172ad795ef4fc70e59136dc5ed2c4df4a78"
+source = "git+https://github.com/MalekiRe/stereokit-sys.git#b85ab6d57aa7193fb8bd19bca36ae0432bd5b599"
 dependencies = [
  "bindgen",
  "cmake",

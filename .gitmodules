@@ -1,0 +1,4 @@
+[submodule "stereokit-rs"]
+	path = stereokit-rs
+	url = https://github.com/grandtheUK/stereokit-rs.git
+	branch = feat/sk_image

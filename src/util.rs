@@ -69,7 +69,7 @@ impl Game {
     fn run_steam(self, tx: mpsc::Sender<LauncherState>) {
         let id = self.steamid.clone().unwrap();
         let url = format!("steam://launch/{}/vr",id);
-        match process::Command::new("xdg-open").arg(url.as_str()).stdout(process::Stdio::null()).output() {
+        match process::Command::new("steam").arg(url.as_str()).stdout(process::Stdio::null()).output() {
             Ok(_) => (),
             Err(_) => println!("couldn't open steam app"),
         }
